@@ -42,9 +42,14 @@
 
 /* USER CODE BEGIN Includes */
 
+#include "ssd1306.h"
+#include "fonts.h"
+
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
+I2C_HandleTypeDef hi2c1;
+
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
@@ -56,6 +61,7 @@ UART_HandleTypeDef huart1;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_I2C1_Init(void);
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
@@ -99,16 +105,34 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART1_UART_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
+  ssd1306_Init();
+  HAL_Delay(1000);
+  ssd1306_Fill(Black);
+  ssd1306_UpdateScreen();
+
+  HAL_Delay(100);
+
   HAL_UART_Transmit( &huart1, (uint8_t *)str_temp, (uint16_t)sizeof(str_temp), 1000);
+
+  ssd1306_SetCursor(0, 0);
+  ssd1306_WriteString("Bob-Kara", Font_7x10, White);
+  /*
+   * A C
+   * B D
+  ssd1306_SetCursor( 0,  0);  ssd1306_WriteChar('A', Font_7x10, White);
+  ssd1306_SetCursor( 0, 10);  ssd1306_WriteChar('B', Font_7x10, White);
+  ssd1306_SetCursor(10,  0);  ssd1306_WriteChar('C', Font_7x10, White);
+  ssd1306_SetCursor(10, 10);  ssd1306_WriteChar('D', Font_7x10, White);
+  */
+  ssd1306_UpdateScreen();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-
-  /* USER CODE END WHILE */
 	if(150 < cnt++)
 	{
 		cnt = 0;
@@ -125,11 +149,17 @@ int main(void)
 		memset(str_temp, '\0', sizeof(str_temp));
 		sprintf(str_temp, "K0_State: %d, K1_State: %d\n\r", K0_State, K1_State);
 		HAL_UART_Transmit( &huart1, (uint8_t *)str_temp, (uint16_t)sizeof(str_temp), 1000);
+
+		ssd1306_SetCursor(0, 10);	sprintf(str_temp, "K0_State: %d", K0_State);	ssd1306_WriteString(str_temp ,Font_7x10, White);
+		ssd1306_SetCursor(0, 20);	sprintf(str_temp, "K1_State: %d", K1_State);	ssd1306_WriteString(str_temp ,Font_7x10, White);
+		ssd1306_UpdateScreen();
 	}
 
 	HAL_GPIO_WritePin(D3_GPIO_Port, D3_Pin, (K0_State & K1_State));
 
 	HAL_Delay(1);	// 1ms
+  /* USER CODE END WHILE */
+
   /* USER CODE BEGIN 3 */
 
   }
@@ -195,6 +225,26 @@ void SystemClock_Config(void)
   HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
 }
 
+/* I2C1 init function */
+static void MX_I2C1_Init(void)
+{
+
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.ClockSpeed = 100000;
+  hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+}
+
 /* USART1 init function */
 static void MX_USART1_UART_Init(void)
 {
@@ -231,6 +281,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(D2_GPIO_Port, D2_Pin, GPIO_PIN_RESET);
