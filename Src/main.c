@@ -41,14 +41,16 @@
 #include "stm32f4xx_hal.h"
 
 /* USER CODE BEGIN Includes */
+#include <string.h>
 
 #include "ssd1306.h"
 #include "fonts.h"
-
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
+
+RTC_HandleTypeDef hrtc;
 
 UART_HandleTypeDef huart1;
 
@@ -62,6 +64,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_I2C1_Init(void);
+static void MX_RTC_Init(void);
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
@@ -83,7 +86,9 @@ int main(void)
   char str_temp[50]="Bob-Kara\n\r";
   GPIO_PinState K0_State, K1_State,
   	  	  	  	K0_State_legacy = GPIO_PIN_RESET, K1_State_legacy = GPIO_PIN_RESET;
-  uint8_t cnt = 0;
+
+  RTC_TimeTypeDef sTime_b;
+  RTC_DateTypeDef sDate_b;
   /* USER CODE END 1 */
 
   /* MCU Configuration----------------------------------------------------------*/
@@ -106,6 +111,7 @@ int main(void)
   MX_GPIO_Init();
   MX_USART1_UART_Init();
   MX_I2C1_Init();
+  MX_RTC_Init();
   /* USER CODE BEGIN 2 */
   ssd1306_Init();
   HAL_Delay(1000);
@@ -117,7 +123,7 @@ int main(void)
   HAL_UART_Transmit( &huart1, (uint8_t *)str_temp, (uint16_t)sizeof(str_temp), 1000);
 
   ssd1306_SetCursor(0, 0);
-  ssd1306_WriteString("Bob-Kara", Font_7x10, White);
+  ssd1306_WriteString("  [Bob-Kara]  ", Font_7x10, White);
   /*
    * A C
    * B D
@@ -133,12 +139,6 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	if(150 < cnt++)
-	{
-		cnt = 0;
-		HAL_GPIO_TogglePin(D2_GPIO_Port, D2_Pin);
-	}
-
 	K0_State = HAL_GPIO_ReadPin(K0_GPIO_Port, K0_Pin);
 	K1_State = HAL_GPIO_ReadPin(K1_GPIO_Port, K1_Pin);
 
@@ -146,18 +146,35 @@ int main(void)
 	{
 		K0_State_legacy = K0_State;
 		K1_State_legacy = K1_State;
-		memset(str_temp, '\0', sizeof(str_temp));
+		memset(str_temp, 0, sizeof(str_temp));
 		sprintf(str_temp, "K0_State: %d, K1_State: %d\n\r", K0_State, K1_State);
 		HAL_UART_Transmit( &huart1, (uint8_t *)str_temp, (uint16_t)sizeof(str_temp), 1000);
 
-		ssd1306_SetCursor(0, 10);	sprintf(str_temp, "K0_State: %d", K0_State);	ssd1306_WriteString(str_temp ,Font_7x10, White);
-		ssd1306_SetCursor(0, 20);	sprintf(str_temp, "K1_State: %d", K1_State);	ssd1306_WriteString(str_temp ,Font_7x10, White);
+		ssd1306_SetCursor(0, 40);	sprintf(str_temp, "K0: %d, K1: %d", K0_State, K1_State);
+		ssd1306_WriteString(str_temp ,Font_7x10, White);
+
 		ssd1306_UpdateScreen();
+	}
+	else
+	{
+		HAL_RTC_GetTime(&hrtc, &sTime_b, RTC_FORMAT_BIN);
+		HAL_RTC_GetDate(&hrtc, &sDate_b, RTC_FORMAT_BIN);
+
+		sprintf(str_temp, "20%02d/%02d/%02d (%01d)", \
+							sDate_b.Year, sDate_b.Month, sDate_b.Date, sDate_b.WeekDay);
+		ssd1306_SetCursor(0, 10);	ssd1306_WriteString(str_temp ,Font_7x10, White);
+
+		sprintf(str_temp, "      %02d:%02d:%02d", \
+							sTime_b.Hours, sTime_b.Minutes, sTime_b.Seconds);
+		ssd1306_SetCursor(0, 20);	ssd1306_WriteString(str_temp ,Font_7x10, White);
+
+		ssd1306_UpdateScreen();
+
+		HAL_GPIO_TogglePin(D2_GPIO_Port, D2_Pin);
+		HAL_Delay(10);	// 100ms
 	}
 
 	HAL_GPIO_WritePin(D3_GPIO_Port, D3_Pin, (K0_State & K1_State));
-
-	HAL_Delay(1);	// 1ms
   /* USER CODE END WHILE */
 
   /* USER CODE BEGIN 3 */
@@ -176,6 +193,7 @@ void SystemClock_Config(void)
 
   RCC_OscInitTypeDef RCC_OscInitStruct;
   RCC_ClkInitTypeDef RCC_ClkInitStruct;
+  RCC_PeriphCLKInitTypeDef PeriphClkInitStruct;
 
     /**Configure the main internal regulator output voltage 
     */
@@ -185,8 +203,9 @@ void SystemClock_Config(void)
 
     /**Initializes the CPU, AHB and APB busses clocks 
     */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE|RCC_OSCILLATORTYPE_LSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.LSEState = RCC_LSE_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
   RCC_OscInitStruct.PLL.PLLM = 4;
@@ -208,6 +227,13 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+  PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_RTC;
+  PeriphClkInitStruct.RTCClockSelection = RCC_RTCCLKSOURCE_LSE;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
@@ -241,6 +267,68 @@ static void MX_I2C1_Init(void)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
+
+}
+
+/* RTC init function */
+static void MX_RTC_Init(void)
+{
+
+  /* USER CODE BEGIN RTC_Init 0 */
+
+  /* USER CODE END RTC_Init 0 */
+
+  RTC_TimeTypeDef sTime;
+  RTC_DateTypeDef sDate;
+
+  /* USER CODE BEGIN RTC_Init 1 */
+
+  /* USER CODE END RTC_Init 1 */
+
+    /**Initialize RTC Only 
+    */
+  hrtc.Instance = RTC;
+  hrtc.Init.HourFormat = RTC_HOURFORMAT_24;
+  hrtc.Init.AsynchPrediv = 127;
+  hrtc.Init.SynchPrediv = 255;
+  hrtc.Init.OutPut = RTC_OUTPUT_DISABLE;
+  hrtc.Init.OutPutPolarity = RTC_OUTPUT_POLARITY_HIGH;
+  hrtc.Init.OutPutType = RTC_OUTPUT_TYPE_OPENDRAIN;
+  if (HAL_RTC_Init(&hrtc) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+  /* USER CODE BEGIN RTC_Init 2 */
+#if 0
+  /* USER CODE END RTC_Init 2 */
+
+    /**Initialize RTC and set the Time and Date 
+    */
+  sTime.Hours = 23;
+  sTime.Minutes = 4;
+  sTime.Seconds = 15;
+  sTime.DayLightSaving = RTC_DAYLIGHTSAVING_NONE;
+  sTime.StoreOperation = RTC_STOREOPERATION_RESET;
+  if (HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BIN) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+  /* USER CODE BEGIN RTC_Init 3 */
+
+  /* USER CODE END RTC_Init 3 */
+
+  sDate.WeekDay = RTC_WEEKDAY_MONDAY;
+  sDate.Month = RTC_MONTH_JULY;
+  sDate.Date = 9;
+  sDate.Year = 18;
+
+  if (HAL_RTC_SetDate(&hrtc, &sDate, RTC_FORMAT_BIN) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+  /* USER CODE BEGIN RTC_Init 4 */
+#endif
+  /* USER CODE END RTC_Init 4 */
 
 }
 
