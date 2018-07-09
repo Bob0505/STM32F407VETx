@@ -157,6 +157,7 @@ int main(void)
 	}
 	else
 	{
+		/* Reading RTC current time locks the values in calendar shadow registers until current date is read. */
 		HAL_RTC_GetTime(&hrtc, &sTime_b, RTC_FORMAT_BIN);
 		HAL_RTC_GetDate(&hrtc, &sDate_b, RTC_FORMAT_BIN);
 
