@@ -1,6 +1,7 @@
 
 #include "stm32f4xx_hal.h"
 #include "fonts.h"
+#include "main.h"
 
 /**
  * This Library is written and optimized by Olivier Van den Eede(4ilo) in 2016
